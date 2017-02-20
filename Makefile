@@ -1,9 +1,3 @@
-#
-#
-#
-#
-#
-
 CC = gcc
 INC = -l /home/son/dku/Lab/Lab4_fuse/Lab4/include
 CFLAGS = -g -W $(INC)

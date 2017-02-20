@@ -123,6 +123,7 @@ void scan_delete_dbmap(IOM *iom, int blocknr_inbmap){
     lab4_clear_bit(blocknr_inbmap, buf_dbmap);        
 }
 
+
 void scan_delete_ibmap(IOM *iom, inode_t del_ino){
 
     char* buf_ibmap;    
