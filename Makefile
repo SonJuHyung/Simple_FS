@@ -5,7 +5,7 @@ CFLAGS += -D_FILE_OFFSET_BITS=64 -DFUSE_USE_VERSION=30 -I/usr/include/fuse
 
 LDFLAGS = -lfuse 
 
-OBJS_FUSE = fuse_main.o file.o dir.o inode.o disk_map.o fsformat.o mount.o bmap.o bmap_raw.o
+OBJS_FUSE = fuse_main.o file.o dir.o inode.o fsformat.o mount.o bmap.o bmap_raw.o
 OBJS_FORMAT = fuse_format_main.o fsformat.o bmap_raw.o
 
 SRCS = $(OBJS_FUSE:.o=.c) $(OBJS_FORMAT:.o=.c)
