@@ -285,7 +285,7 @@ static int xmp_symlink(const char *from, const char *to)
     return LAB4_SUCCESS;
 }
 
-static int xmp_rename(const char *from, const char *to)
+static int lab4_rename(const char *from, const char *to)
 {
 
 }
@@ -401,7 +401,7 @@ static struct fuse_operations lab4_oper = {
     .symlink	= xmp_symlink,
     .unlink		= lab4_unlink,      // o
     .rmdir		= lab4_rmdir,       // o
-    .rename		= xmp_rename,       // x
+    .rename		= lab4_rename,       // x
     .link		= xmp_link,
     .chmod		= xmp_chmod,
     .chown		= xmp_chown,
