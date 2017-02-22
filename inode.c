@@ -144,7 +144,7 @@ int lab4_read_inode(IOM *iom, const char *path, INODE **inode){
 
         while(filename != NULL)
         {                
-            res = lab4_lookup(iom, cur_ino, &dir_entry,filename,&isdelete);
+            res = lab4_lookup(iom, cur_ino, &dir_entry,filename,&isdelete, NULL);
             if(res == LAB4_ERROR)
                 return LAB4_ERROR;
             if(res == -ENOENT)

@@ -38,7 +38,7 @@
 
 #include "include/lab4_fs_types.h"
 
-int lab4_lookup(IOM *iom, inode_t parent_dir_ino, struct lab4_dir_entry *file_entry, const char *filename, int *isdelete){
+int lab4_lookup(IOM *iom, inode_t parent_dir_ino, struct lab4_dir_entry *file_entry, const char *filename, int *isdelete, const char *rename_new){
 
     struct lab4_sb_info *sbi = IOM_SB_I(iom);
 	INODE *dir_inode;
@@ -81,6 +81,12 @@ int lab4_lookup(IOM *iom, inode_t parent_dir_ino, struct lab4_dir_entry *file_en
                 }
                 else{
                    *isdelete = -1; 
+                }
+                if(rename_new){
+                    strcpy(dir->d_filename,rename_new);
+                    *isdelete = read_bytes;
+                }else{
+                    *isdelete = -1;
                 }
 				return LAB4_SUCCESS;
 			}
@@ -211,7 +217,7 @@ int do_mkdir(IOM *iom,INODE *parent_inode, char *name){
     int cluster_size = sbi->cluster_size, parent_dir_blocknr;
 	int res = LAB4_ERROR, isdelete = 0;
 
-    res = lab4_lookup(iom, parent_inode->i_ino, &dir_entry,name,&isdelete);
+    res = lab4_lookup(iom, parent_inode->i_ino, &dir_entry,name,&isdelete, NULL);
     if(res == LAB4_SUCCESS)
         return -EEXIST;
 
@@ -370,7 +376,7 @@ int do_rmdir(IOM *iom,INODE *parent_inode, char *filename){
     int res, cluster_size = sbi->cluster_size, isdelete = 1;
     
 
-    res = lab4_lookup(iom, parent_inode->i_ino, &del_entry,filename, &isdelete);
+    res = lab4_lookup(iom, parent_inode->i_ino, &del_entry,filename, &isdelete, NULL);
     if(res == LAB4_ERROR)
         return LAB4_ERROR;
     if(res == -ENOENT)
@@ -428,4 +434,35 @@ ERROR1:
     return LAB4_ERROR;
 }
 
+int do_rename(IOM *iom, INODE *parent_inode,const char *from,const char *to){
+    struct lab4_sb_info *sbi = IOM_SB_I(iom);
+    struct lab4_dir_entry del_entry;
+    INODE *del_inode=NULL;
+    inode_t cur_ino;
+    char tmp_path[256];
+    char* buf_zero= NULL, *buf_backup=NULL;
+    int res, cluster_size = sbi->cluster_size, isdelete = 0;
 
+
+    res = lab4_lookup(iom, parent_inode->i_ino, &del_entry,from, &isdelete,to);
+    if(res == LAB4_ERROR)
+        return LAB4_ERROR;
+    if(res == -ENOENT)
+        return -ENOENT;
+
+    if(isdelete !=-1){
+        pwrite(iom->dev_fd, &del_entry,LAB4_DIR_ENTRY_SIZE,parent_inode->i_blocks[0]+isdelete);
+    }
+
+    return LAB4_SUCCESS;
+
+ERROR3:
+    restore_data(iom,buf_backup, cluster_size, del_inode->i_blocks[0]);
+ERROR2:
+    restore_dbmap(iom);
+ERROR1:
+    restore_ibmap(iom);
+    restore_itble(iom);
+    return LAB4_ERROR;
+
+}

@@ -41,14 +41,8 @@
 
 #include "include/lab4_fs_types.h"
 
-
-
 /* Debug Macro  */
-#define LAB4_FUSE 1
-#define EXAMPLE_FUSE 0
 #define DEBUG 1
-
-#if LAB4_FUSE 
 
 static int test_read(const char *path, char *buffer, size_t size, off_t offset, struct fuse_file_info *fi){
 
@@ -287,7 +281,34 @@ static int xmp_symlink(const char *from, const char *to)
 
 static int lab4_rename(const char *from, const char *to)
 {
+     struct lab4_dir_entry *dir_entry;
+    INODE *dir_inode = NULL;
+    char f_name[FNAME_SIZE]={0.};
+    char d_name[FNAME_SIZE]={0,};
+	int res = -1;
 
+    res = do_path_check(from);
+    if(res == LAB4_ERROR)
+        return LAB4_ERROR;
+    res = do_path_check(to);
+    if(res == LAB4_ERROR)
+        return LAB4_ERROR;
+    res = get_name_from_path(from, f_name, d_name);
+
+    res = lab4_read_inode(iom, d_name, &dir_inode);
+    if(res == LAB4_ERROR)
+        return LAB4_ERROR; 
+    else if(res == -ENOENT)
+        return -ENOENT;
+
+    res = do_rename(iom,dir_inode, from, to);
+    if(res == LAB4_ERROR)
+        return LAB4_ERROR;
+    if(res == -ENOENT)
+        return -ENOENT;
+    
+    return LAB4_SUCCESS;
+   
 }
 
 static int xmp_link(const char *from, const char *to)
@@ -323,17 +344,33 @@ static int lab4_open(const char *path, struct fuse_file_info *fi)
     return LAB4_SUCCESS;
 }
 
-static int xmp_read(const char *path, char *buf, size_t size, off_t offset,
+static int lab4_read(const char *path, char *buf, size_t size, off_t offset,
         struct fuse_file_info *fi)
 {
+    INODE *inode = NULL;
+    int res;
+    
+    res = do_path_check(path);
+    if(res == LAB4_ERROR)
+        return LAB4_ERROR;
 
-    return LAB4_SUCCESS;
+    res = do_read(iom,fi->fh, buf,size,offset);
+    return res;
+
 }
 
-static int xmp_write(const char *path, const char *buf, size_t size,
+static int lab4_write(const char *path, const char *buf, size_t size,
         off_t offset, struct fuse_file_info *fi)
 {
-    return LAB4_SUCCESS;
+    INODE *inode = NULL;
+    int res;
+    
+    res = do_path_check(path);
+    if(res == LAB4_ERROR)
+        return LAB4_ERROR;
+
+    res = do_write(iom,fi->fh, buf,size,offset);
+    return res;
 }
 
 static int xmp_statfs(const char *path, struct statvfs *stbuf)
@@ -401,14 +438,14 @@ static struct fuse_operations lab4_oper = {
     .symlink	= xmp_symlink,
     .unlink		= lab4_unlink,      // o
     .rmdir		= lab4_rmdir,       // o
-    .rename		= lab4_rename,       // x
+    .rename		= lab4_rename,       // o
     .link		= xmp_link,
     .chmod		= xmp_chmod,
     .chown		= xmp_chown,
     .truncate	= xmp_truncate,     // x
     .open		= lab4_open,        // o
-    .read		= xmp_read,         // x
-    .write		= xmp_write,        // x
+    .read		= lab4_read,        // o
+    .write		= lab4_write,       // o
     .statfs		= xmp_statfs,
     .release	= lab4_release,     // o
 	.releasedir	= xmp_releasedir,   // x  (optional)
@@ -418,8 +455,6 @@ static struct fuse_operations lab4_oper = {
     .create     = lab4_create,      // o ... same with open
     .utimens     = lab4_utimens     // o
 };
-
-#endif
 
 int main(int argc, char *argv[])
 {  
@@ -474,18 +509,11 @@ int main(int argc, char *argv[])
         strcpy(tmp_argv[i], argv[argc-1]);
 #endif
 
-#if EXAMPLE_FUSE
-        ret = fuse_main(tmp_argc, tmp_argv, &test_oper, NULL);
-#else
         ret = fuse_main(tmp_argc, tmp_argv, &lab4_oper, NULL);
-//        ret = fuse_main(argc, argv, &lab4_oper, NULL);
-#endif
         if(ret < 0){
             printf("\n---------------------     mount failed     --------------------\n");
             goto ERROR;
         }   
-//       /*FIXME*/
-//        printf("\n---------------------    mount success     --------------------\n");
 
         return LAB4_SUCCESS;
     }

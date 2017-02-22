@@ -83,7 +83,7 @@ int lab4_createfile(IOM *iom, INODE *parent_inode,char *filename, INODE **new_in
 		return -ENAMETOOLONG;
 	}
 
-    res = lab4_lookup(iom, parent_inode->i_ino, &dir_entry,filename,&isdelete);
+    res = lab4_lookup(iom, parent_inode->i_ino, &dir_entry,filename,&isdelete, NULL);
     if(res == LAB4_SUCCESS)
         return -EEXIST;
 
@@ -187,7 +187,7 @@ int do_openfile(IOM *iom, INODE *parent_inode ,char *filename,int flags,int mode
 
     memset(&file_entry, 0x0, LAB4_INODE_ENTRY_SIZE);
 
-    res = lab4_lookup(iom,parent_inode->i_ino,&file_entry,filename,&isdelete);
+    res = lab4_lookup(iom,parent_inode->i_ino,&file_entry,filename,&isdelete, NULL);
     if(res == LAB4_ERROR)
         return res;
     else if (res == -ENOENT) 
@@ -271,7 +271,6 @@ void lab4_do_close(IOM *iom, int fid)
 	ft->size = 0;
 	ft->used = 0;
 	ft->rwoffset = 0;
-	ft->prefetch_cur = 0;
 	ft->flags = 0;
 
 }
@@ -342,7 +341,7 @@ int do_unlink(IOM *iom, INODE *parent_inode, char *filename)
     int res, cluster_size = sbi->cluster_size, isdelete = 1;
     
 
-    res = lab4_lookup(iom, parent_inode->i_ino, &del_entry,filename, &isdelete);
+    res = lab4_lookup(iom, parent_inode->i_ino, &del_entry,filename, &isdelete, NULL);
     if(res == LAB4_ERROR)
         return LAB4_ERROR;
     if(res == -ENOENT)
@@ -389,6 +388,155 @@ int do_unlink(IOM *iom, INODE *parent_inode, char *filename)
 FREE1:
     free(del_inode);
 
+    return LAB4_ERROR;
+}
+
+/*
+ * FIXME
+ *
+ * need to support multi block
+ * */
+int do_write(IOM *iom, unsigned int fid, const char *buf, unsigned int size, unsigned int offset)
+{
+    struct lab4_sb_info *sbi = IOM_SB_I(iom);
+	struct lab4_inode *inode;
+	struct lab4_file_table *cur_file_info;
+    int cur_offset=0, cur_count=0,res=LAB4_ERROR, w_byte, cluster_size;
+    unsigned int cur_remain=0;
+    long blocknr, blocknr_inbmap;
+    char *buf_new;
+
+    cluster_size = iom->cluster_size;
+	cur_file_info = &(sbi->file_table[fid]);
+	cur_file_info->rwoffset = offset;
+
+    inode = do_read_inode(iom,cur_file_info->ino);
+    if(!inode)
+        return LAB4_ERROR;
+
+    if(inode->i_size == 0){
+        res = alloc_block_inbmap(iom,&blocknr_inbmap);
+        if(res == LAB4_ERROR){
+            restore_dbmap(iom);
+            return LAB4_ERROR;
+        }
+        blocknr = blocknr_inbmap*cluster_size + sbi->darea_start;       
+        inode->i_blocks[0] = blocknr;
+    }else{
+        blocknr = inode->i_blocks[0];
+    }
+
+    blocknr += offset;
+    while(size > 0){
+        cur_offset = cur_file_info->rwoffset & (cluster_size - 1);
+        cur_remain = cluster_size - offset;
+        if (cur_remain > size){
+            cur_remain = size;
+        }else{
+            /*FIXME*/
+        }
+
+        if (size && inode->i_size <= cur_file_info->rwoffset)
+        {
+            w_byte = pwrite(iom->dev_fd, buf ,cur_remain,blocknr);
+            if(w_byte == LAB4_ERROR)
+                goto FREE_ERROR1;
+
+            cur_count += cur_remain;
+            cur_file_info->rwoffset += cur_remain;
+            size -= cur_remain;
+
+            if (cur_file_info->rwoffset > cur_file_info->size)
+                cur_file_info->size = cur_file_info->rwoffset;
+
+            inode->i_size = cur_file_info->size;
+
+
+        }else{
+            buf_new = (char*)malloc(cluster_size);
+            memset(buf_new, 0x0 ,cluster_size);
+            strncpy(buf_new, buf,size);
+
+            w_byte = pwrite(iom->dev_fd, buf_new ,cluster_size,blocknr);
+            if(w_byte == LAB4_ERROR)
+                goto FREE_ERROR1;
+
+             cur_count += cur_remain;           
+             cur_file_info->rwoffset = cur_remain;
+             cur_file_info->size = cur_file_info->rwoffset;
+             size -= cur_remain;
+             inode->i_size = cur_file_info->size;
+        }
+
+    }
+    res = write_inode_to_itble(iom, inode);
+    if(res == LAB4_ERROR)
+        goto FREE_ERROR1;
+
+    update_sb(iom);
+    update_itble(iom);
+    update_dbmap(iom);
+
+    free(inode);
+    return w_byte;
+
+FREE_ERROR1:
+    free(inode);
+    return LAB4_ERROR;
+}
+
+int do_read(IOM *iom,unsigned int fid, char *buf,unsigned int size, unsigned int offset){
+  
+    struct lab4_sb_info *sbi = IOM_SB_I(iom);
+	struct lab4_inode *inode;
+	struct lab4_file_table *cur_file_info;
+    int cur_offset=0, cur_count=0,res=LAB4_ERROR, r_byte, cluster_size;
+    unsigned int cur_remain=0;
+    long blocknr, blocknr_inbmap;
+    char *buf_read;
+
+    cluster_size = iom->cluster_size;
+	cur_file_info = &(sbi->file_table[fid]);
+	cur_file_info->rwoffset = offset;
+
+    inode = do_read_inode(iom,cur_file_info->ino);
+    if(!inode)
+        return LAB4_ERROR;
+
+    if(inode->i_size == 0){
+        free(inode);
+        return 0;
+    }else{
+        blocknr = inode->i_blocks[0];
+    }
+
+    buf_read = (char*)malloc(cluster_size);
+    memset(buf_read, 0x0 ,cluster_size);
+
+	while (size > 0 && cur_file_info->rwoffset < inode->i_size) {
+        
+        pread(iom->dev_fd, buf_read ,size,blocknr);
+        r_byte = strlen(buf_read);
+        strncpy(buf, buf_read,r_byte);
+        memset(buf_read, 0x0, cluster_size);
+//		bh = nvfuse_get_bh(sb, ictx, inode->i_ino, NVFUSE_SIZE_TO_BLK(of->rwoffset), sync_read, NVFUSE_TYPE_DATA);
+        
+		cur_offset = cur_file_info->rwoffset & (CLUSTER_SIZE - 1);
+		cur_remain = CLUSTER_SIZE - cur_offset;
+
+		if (cur_remain > size)
+			cur_remain = size;
+
+		cur_count += cur_remain;
+		cur_file_info->rwoffset += cur_remain;
+		size -= cur_remain;
+	}
+
+    free(inode);
+    return r_byte;
+
+FREE_ERROR1:
+    free(inode);
     return LAB4_ERROR;
 }
 

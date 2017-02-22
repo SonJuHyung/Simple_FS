@@ -243,7 +243,7 @@ struct lab4_file_table{
 	inode_t	ino;
 	s64	size;
 	s32	used;
-	lab4_off_t prefetch_cur;
+//	lab4_off_t prefetch_cur;
 	lab4_off_t rwoffset;
 	s32 flags;
 //	pthread_mutex_t ft_lock;
@@ -345,12 +345,10 @@ int delete_inode(IOM *iom, INODE *del_inode);
 void delete_block_inbmap(IOM *iom, INODE * blocknr);
 void inc_link(IOM *iom, inode_t par_ino);
 void dec_link(IOM *iom, inode_t par_ino);
-
 void inc_free_inodes(IOM *iom);
 void dec_free_inodes(IOM *iom);
 void inc_free_blocks(IOM *iom);
 void dec_free_blocks(IOM *iom);
-
 int do_utimens(IOM *iom, const char *path, const struct timespec ts[2]);
 
 
@@ -360,8 +358,8 @@ int do_mkdir(IOM *iom,INODE *inode, char *name);
 int do_rmdir(IOM *iom,INODE *dir_inode, char *name);
 int check_dir_deletable(IOM *iom,INODE *del_inode);
 int get_name_from_path(const char *path, char *f_name, char* d_name);
-int lab4_lookup(IOM *iom, inode_t parent_dir_ino, struct lab4_dir_entry *file_entry, const char *filename,int *isdelete);
-/* disk_map.c */
+int lab4_lookup(IOM *iom, inode_t parent_dir_ino, struct lab4_dir_entry *file_entry, const char *filename,int *isdelete,const char *rename_new);
+int do_rename(IOM *iom, INODE *parent_inode, const char *from, const char *to);
 
 /* file.c */
 int lab4_allocate_open_file_table(IOM *iom);
@@ -370,6 +368,8 @@ int lab4_createfile(IOM *iom, INODE *parent_inode,char *filename, INODE **new_in
 int lab4_seek(struct lab4_super_block *sb, struct lab4_file_table *ft,long offset, int position);
 void lab4_do_close(IOM *iom, int fid);
 int do_unlink(IOM *iom, INODE *parent_inode, char *filename);
+int do_write(IOM *iom, unsigned int fid, const char *buf, unsigned int size, unsigned int offset);
+int do_read(IOM *iom,unsigned int fid, char *buf,unsigned int size, unsigned int roffset);
 
 
 /* bmap.c  */
