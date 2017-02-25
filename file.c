@@ -83,7 +83,7 @@ int lab4_createfile(IOM *iom, INODE *parent_inode,char *filename, INODE **new_in
 		return -ENAMETOOLONG;
 	}
 
-    res = lab4_lookup(iom, parent_inode->i_ino, &dir_entry,filename,&isdelete, NULL);
+    res = lab4_lookup(iom, parent_inode->i_ino, &dir_entry,filename,&isdelete);
     if(res == LAB4_SUCCESS)
         return -EEXIST;
 
@@ -187,7 +187,7 @@ int do_openfile(IOM *iom, INODE *parent_inode ,char *filename,int flags,int mode
 
     memset(&file_entry, 0x0, LAB4_INODE_ENTRY_SIZE);
 
-    res = lab4_lookup(iom,parent_inode->i_ino,&file_entry,filename,&isdelete, NULL);
+    res = lab4_lookup(iom,parent_inode->i_ino,&file_entry,filename,&isdelete);
     if(res == LAB4_ERROR)
         return res;
     else if (res == -ENOENT) 
@@ -341,7 +341,7 @@ int do_unlink(IOM *iom, INODE *parent_inode, char *filename)
     int res, cluster_size = sbi->cluster_size, isdelete = 1;
     
 
-    res = lab4_lookup(iom, parent_inode->i_ino, &del_entry,filename, &isdelete, NULL);
+    res = lab4_lookup(iom, parent_inode->i_ino, &del_entry,filename, &isdelete);
     if(res == LAB4_ERROR)
         return LAB4_ERROR;
     if(res == -ENOENT)

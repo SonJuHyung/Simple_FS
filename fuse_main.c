@@ -283,8 +283,6 @@ static int lab4_rename(const char *from, const char *to)
 {
      struct lab4_dir_entry *dir_entry;
     INODE *dir_inode = NULL;
-    char f_name[FNAME_SIZE]={0.};
-    char d_name[FNAME_SIZE]={0,};
 	int res = -1;
 
     res = do_path_check(from);
@@ -293,21 +291,10 @@ static int lab4_rename(const char *from, const char *to)
     res = do_path_check(to);
     if(res == LAB4_ERROR)
         return LAB4_ERROR;
-    res = get_name_from_path(from, f_name, d_name);
 
-    res = lab4_read_inode(iom, d_name, &dir_inode);
-    if(res == LAB4_ERROR)
-        return LAB4_ERROR; 
-    else if(res == -ENOENT)
-        return -ENOENT;
-
-    res = do_rename(iom,dir_inode, from, to);
-    if(res == LAB4_ERROR)
-        return LAB4_ERROR;
-    if(res == -ENOENT)
-        return -ENOENT;
+    res = do_rename(iom, from, to);
+    return res;
     
-    return LAB4_SUCCESS;
    
 }
 

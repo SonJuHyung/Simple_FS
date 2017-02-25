@@ -358,8 +358,8 @@ int do_mkdir(IOM *iom,INODE *inode, char *name);
 int do_rmdir(IOM *iom,INODE *dir_inode, char *name);
 int check_dir_deletable(IOM *iom,INODE *del_inode);
 int get_name_from_path(const char *path, char *f_name, char* d_name);
-int lab4_lookup(IOM *iom, inode_t parent_dir_ino, struct lab4_dir_entry *file_entry, const char *filename,int *isdelete,const char *rename_new);
-int do_rename(IOM *iom, INODE *parent_inode, const char *from, const char *to);
+int lab4_lookup(IOM *iom, inode_t parent_dir_ino, struct lab4_dir_entry *file_entry, const char *filename,int *isdelete);
+int do_rename(IOM *iom, const char *from, const char *to);
 
 /* file.c */
 int lab4_allocate_open_file_table(IOM *iom);

@@ -38,7 +38,7 @@
 
 #include "include/lab4_fs_types.h"
 
-int lab4_lookup(IOM *iom, inode_t parent_dir_ino, struct lab4_dir_entry *file_entry, const char *filename, int *isdelete, const char *rename_new){
+int lab4_lookup(IOM *iom, inode_t parent_dir_ino, struct lab4_dir_entry *file_entry, const char *filename, int *isdelete){
 
     struct lab4_sb_info *sbi = IOM_SB_I(iom);
 	INODE *dir_inode;
@@ -82,12 +82,7 @@ int lab4_lookup(IOM *iom, inode_t parent_dir_ino, struct lab4_dir_entry *file_en
                 else{
                    *isdelete = -1; 
                 }
-                if(rename_new){
-                    strcpy(dir->d_filename,rename_new);
-                    *isdelete = read_bytes;
-                }else{
-                    *isdelete = -1;
-                }
+
 				return LAB4_SUCCESS;
 			}
 		}
@@ -217,7 +212,7 @@ int do_mkdir(IOM *iom,INODE *parent_inode, char *name){
     int cluster_size = sbi->cluster_size, parent_dir_blocknr;
 	int res = LAB4_ERROR, isdelete = 0;
 
-    res = lab4_lookup(iom, parent_inode->i_ino, &dir_entry,name,&isdelete, NULL);
+    res = lab4_lookup(iom, parent_inode->i_ino, &dir_entry,name,&isdelete);
     if(res == LAB4_SUCCESS)
         return -EEXIST;
 
@@ -376,7 +371,7 @@ int do_rmdir(IOM *iom,INODE *parent_inode, char *filename){
     int res, cluster_size = sbi->cluster_size, isdelete = 1;
     
 
-    res = lab4_lookup(iom, parent_inode->i_ino, &del_entry,filename, &isdelete, NULL);
+    res = lab4_lookup(iom, parent_inode->i_ino, &del_entry,filename, &isdelete);
     if(res == LAB4_ERROR)
         return LAB4_ERROR;
     if(res == -ENOENT)
@@ -434,35 +429,122 @@ ERROR1:
     return LAB4_ERROR;
 }
 
-int do_rename(IOM *iom, INODE *parent_inode,const char *from,const char *to){
+int do_rename(IOM *iom,const char *from,const char *to){
     struct lab4_sb_info *sbi = IOM_SB_I(iom);
-    struct lab4_dir_entry del_entry;
-    INODE *del_inode=NULL;
+    struct lab4_dir_entry del_entry, rename_entry, *dir, tmp_entry;
+    INODE *del_inode=NULL, *del_dir_inode=NULL, *rename_dir_inode=NULL;
     inode_t cur_ino;
     char tmp_path[256];
     char* buf_zero= NULL, *buf_backup=NULL;
-    int res, cluster_size = sbi->cluster_size, isdelete = 0;
+    int res, cluster_size = sbi->cluster_size, isdelete = 1, isdelete_2=0;
+    char f_name[FNAME_SIZE]={0.};
+    char d_name[FNAME_SIZE]={0,};
+    char *buf_dir_entry;
+    unsigned int offset = 0;
+    long read_bytes = 0;
+    long dir_size = 0;
+    int start = 0;
+    int blocknr;
 
 
-    res = lab4_lookup(iom, parent_inode->i_ino, &del_entry,from, &isdelete,to);
+    res = get_name_from_path(from, f_name, d_name);
+
+    res = lab4_read_inode(iom, d_name, &del_dir_inode);
+    if(res == LAB4_ERROR)
+        return LAB4_ERROR; 
+    else if(res == -ENOENT)
+        return -ENOENT;
+
+
+    res = lab4_lookup(iom, del_dir_inode->i_ino, &del_entry,f_name, &isdelete);
     if(res == LAB4_ERROR)
         return LAB4_ERROR;
     if(res == -ENOENT)
         return -ENOENT;
 
-    if(isdelete !=-1){
-        pwrite(iom->dev_fd, &del_entry,LAB4_DIR_ENTRY_SIZE,parent_inode->i_blocks[0]+isdelete);
+//    res = get_name_from_path(to, f_name, d_name);
+    res = lab4_read_inode(iom, to, &rename_dir_inode);
+    if(res == LAB4_ERROR)
+        return LAB4_ERROR; 
+    else if(res == -ENOENT){
+        memset(f_name, 0x0 ,FNAME_SIZE);
+        memset(d_name, 0x0 ,FNAME_SIZE);
+
+        res = get_name_from_path(to, f_name, d_name);
+        lab4_read_inode(iom, d_name, &rename_dir_inode);
+        if(res == LAB4_ERROR)
+            return LAB4_ERROR;
+        if(res == -ENOENT)
+            return -ENOENT;
+
+        if(del_dir_inode->i_ino == rename_dir_inode->i_ino){
+
+            memcpy(&rename_entry, &del_entry, LAB4_DIR_ENTRY_SIZE);
+            rename_entry.d_flag = LAB4_DIR_USED;
+            memset(rename_entry.d_filename, 0x0 ,sizeof(rename_entry.d_filename));
+            strcpy(rename_entry.d_filename, f_name);
+
+            pwrite(iom->dev_fd, &rename_entry,LAB4_DIR_ENTRY_SIZE,del_dir_inode->i_blocks[0]+isdelete);
+            
+            return LAB4_SUCCESS;
+        }    
     }
 
+    if(rename_dir_inode->i_type == LAB4_TYPE_DIRECTORY){
+
+        memcpy(&rename_entry, &del_entry, LAB4_DIR_ENTRY_SIZE);
+        rename_entry.d_flag = LAB4_DIR_USED;
+
+        memset(&tmp_entry, 0x0 ,LAB4_DIR_ENTRY_SIZE);
+        res = lab4_lookup(iom, rename_dir_inode->i_ino, &tmp_entry, f_name, &isdelete_2);
+        if(res == LAB4_ERROR)
+            return res;
+        if(tmp_entry.d_ino != 0)
+            return -EEXIST;
+        if(res == -ENOENT){
+            buf_dir_entry = (char*)malloc(iom->cluster_size);
+            if(!buf_dir_entry)
+                return LAB4_ERROR;
+            memset(buf_dir_entry, 0x0, iom->cluster_size);
+
+            dir_size = rename_dir_inode->i_size;
+            start = offset * LAB4_DIR_ENTRY_SIZE;
+            blocknr = rename_dir_inode->i_blocks[0];
+
+            res = pread(iom->dev_fd,buf_dir_entry, iom->cluster_size, blocknr);
+            if(res ==  LAB4_ERROR)
+                goto FREE;
+            dir = (struct lab4_dir_entry *)buf_dir_entry;
+
+            /*FIXME - indirect block, triple block support, no such file */
+            for (read_bytes = start; read_bytes < dir_size; read_bytes += LAB4_DIR_ENTRY_SIZE) {
+
+                if (dir->d_flag != LAB4_DIR_USED) {
+                    pwrite(iom->dev_fd, &rename_entry, LAB4_DIR_ENTRY_SIZE, rename_dir_inode->i_blocks[0] + read_bytes);
+                    break;
+                }
+                dir++;
+            }
+
+            if(isdelete !=-1){
+                pwrite(iom->dev_fd, &del_entry,LAB4_DIR_ENTRY_SIZE,del_dir_inode->i_blocks[0]+isdelete);
+            }
+        }else{
+            return -EEXIST; 
+        }
+
+    }else{
+        return -EEXIST;
+    }
+
+    //pwrite(iom->dev_fd, &del_entry,LAB4_DIR_ENTRY_SIZE,del_dir_inode->i_blocks[0]+isdelete);
+
+FREE_SUCCESS:
+    free(buf_dir_entry);
     return LAB4_SUCCESS;
 
-ERROR3:
-    restore_data(iom,buf_backup, cluster_size, del_inode->i_blocks[0]);
-ERROR2:
-    restore_dbmap(iom);
-ERROR1:
-    restore_ibmap(iom);
-    restore_itble(iom);
+FREE:
+    free(buf_dir_entry);
     return LAB4_ERROR;
 
 }
